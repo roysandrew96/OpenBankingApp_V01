@@ -26,6 +26,8 @@ namespace OpenBankingApp_V01
 
         private async void btnInvoke_Click(object sender, EventArgs e)
         {
+            btnInvoke.Enabled = false;
+            this.Cursor = Cursors.WaitCursor;
             txtError.Text = "";
             try
             {
@@ -70,6 +72,11 @@ namespace OpenBankingApp_V01
             catch (Exception ex)
             {
                 txtError.Text = string.Format($"An Error Occurred - {ex.Message}");
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
+                btnInvoke.Enabled = true;
             }
         }
 
