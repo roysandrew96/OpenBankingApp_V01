@@ -26,10 +26,11 @@ namespace OpenBankingApp_V01
             CheckEnabled();
         }
 
-        private async void InvokeAPI( string methodPlusArguments, int? page = null, int? pageSize = null)
+        private async Task<string> InvokeAPI( string methodPlusArguments, int? page = null, int? pageSize = null)
         {
             try
             {
+                var responseBody = "";
                 using (HttpClient _httpClient = new HttpClient())
                 {
                     JsonSerializerOptions _jsonSerializerOptions;
@@ -61,28 +62,51 @@ namespace OpenBankingApp_V01
                         {
                             fullApiUri = string.Concat(fullApiUri, "?page=", page, "&page-size=", pageSize);
                         }
-                            
 
-                        var _httpRequest = new HttpRequestMessage(HttpMethod.Get, fullApiUri);
-                        _httpRequest.Headers.Add("Accept", "application/json");
-                        _httpRequest.Headers.Add("Accept", "application/xml");
-                        _httpRequest.Headers.Add("x-v", "3");
-                        //_httpRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36");
-                        //_httpRequest.Headers.Add("x-v", "2");
-                        var response = await _httpClient.SendAsync(_httpRequest);
-                        response.EnsureSuccessStatusCode();
+                        var requestSuccessful = false;
+                        var continueTrying = true;
+                        var lastExceptionMessage = "";
 
-                        var responseBody = await response.Content.ReadAsStringAsync();
-
-                        LoadJsonIntoTreeView(tvwAPIResponse, responseBody);
+                        for (var apiVersion = 7; apiVersion > 0; apiVersion--)
+                        {
+                            try
+                            {
+                                var _httpRequest = new HttpRequestMessage(HttpMethod.Get, fullApiUri);
+                                _httpRequest.Headers.Add("x-v", apiVersion.ToString());
+                                _httpRequest.Headers.Add("x-min-v", apiVersion.ToString());
+                                var response = await _httpClient.SendAsync(_httpRequest);
+                                response.EnsureSuccessStatusCode();
+                                responseBody = await response.Content.ReadAsStringAsync();
+                                requestSuccessful = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                // If the Exception is HTTP 406, then let's try again
+                                if (!ex.Message.Contains("406"))
+                                {
+                                    continueTrying = false;
+                                }
+                                lastExceptionMessage = ex.Message;
+                            }
+                            if (!continueTrying || requestSuccessful)
+                                break;
+                        }
+                        if (requestSuccessful)
+                        {
+                            LoadJsonIntoTreeView(tvwAPIResponse, responseBody);
+                        }
+                        else
+                        {
+                            throw new Exception($"Request did not succeed - {lastExceptionMessage}");
+                        }
                     }
                 }
+                return responseBody;
             }
-            catch (Exception ex)
+            catch
             {
-                throw ex;
+                throw;
             }
-
         }
 
 
@@ -93,7 +117,9 @@ namespace OpenBankingApp_V01
             txtError.Text = "";
             try
             {
-                InvokeAPI(cboMethod.Text, 1, 25);            
+                var pageNo = int.Parse(cboPageNumber.Text);
+                var pageSize = int.Parse(cboPageSize.Text);
+                await InvokeAPI(cboMethod.Text, pageNo, pageSize);            
             }
             catch (Exception ex)
             {
@@ -219,9 +245,9 @@ namespace OpenBankingApp_V01
             {
                 var nodeElements = tvNode.Text.Split(":");
                 var productId = nodeElements[1].Replace("\"", "").Trim();
-                var productIdGuid = new Guid(productId);
-                var fullProductURL = string.Concat(cboMethod.Text, "/", productIdGuid.ToString());
-                InvokeAPI(fullProductURL);
+                //var productIdGuid = new Guid(productId);
+                var fullProductURL = string.Concat(cboMethod.Text, "/", productId);
+                var responseBody = InvokeAPI(fullProductURL);
             }
         }
     }
