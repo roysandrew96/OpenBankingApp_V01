@@ -13,6 +13,8 @@ using System.Windows.Forms;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Xml;
 
 namespace OpenBankingApp_V01
 {
@@ -24,11 +26,8 @@ namespace OpenBankingApp_V01
             CheckEnabled();
         }
 
-        private async void btnInvoke_Click(object sender, EventArgs e)
+        private async void InvokeAPI( string methodPlusArguments, int? page = null, int? pageSize = null)
         {
-            btnInvoke.Enabled = false;
-            this.Cursor = Cursors.WaitCursor;
-            txtError.Text = "";
             try
             {
                 using (HttpClient _httpClient = new HttpClient())
@@ -57,9 +56,19 @@ namespace OpenBankingApp_V01
                             sb.Append(apiChosenElements[i]);
                         }
                         var apiUri = sb.ToString();
-                        var fullApiUri = string.Concat(apiUri, "/", cboMethod.Text, "?page=", cboPageNumber.Text.ToString(), "&page-size=", cboPageSize.Text.ToString() );
+                        var fullApiUri = string.Concat(apiUri, "/", methodPlusArguments);
+                        if (page != null)
+                        {
+                            fullApiUri = string.Concat(fullApiUri, "?page=", page, "&page-size=", pageSize);
+                        }
+                            
+
                         var _httpRequest = new HttpRequestMessage(HttpMethod.Get, fullApiUri);
+                        _httpRequest.Headers.Add("Accept", "application/json");
+                        _httpRequest.Headers.Add("Accept", "application/xml");
                         _httpRequest.Headers.Add("x-v", "3");
+                        //_httpRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36");
+                        //_httpRequest.Headers.Add("x-v", "2");
                         var response = await _httpClient.SendAsync(_httpRequest);
                         response.EnsureSuccessStatusCode();
 
@@ -68,6 +77,23 @@ namespace OpenBankingApp_V01
                         LoadJsonIntoTreeView(tvwAPIResponse, responseBody);
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+
+        }
+
+
+        private async void btnInvoke_Click(object sender, EventArgs e)
+        {
+            btnInvoke.Enabled = false;
+            this.Cursor = Cursors.WaitCursor;
+            txtError.Text = "";
+            try
+            {
+                InvokeAPI(cboMethod.Text, 1, 25);            
             }
             catch (Exception ex)
             {
@@ -179,6 +205,24 @@ namespace OpenBankingApp_V01
         private void cboMethod_SelectedIndexChanged(object sender, EventArgs e)
         {
             CheckEnabled();
+        }
+
+        private void tvwAPIResponse_AfterSelect(object sender, TreeViewEventArgs e)
+        {
+
+        }
+
+        private void tvwAPIResponse_NodeMouseDoubleClick(object sender, TreeNodeMouseClickEventArgs e)
+        {
+            var tvNode = e.Node;
+            if (tvNode.Text.ToLower().StartsWith("productid"))
+            {
+                var nodeElements = tvNode.Text.Split(":");
+                var productId = nodeElements[1].Replace("\"", "").Trim();
+                var productIdGuid = new Guid(productId);
+                var fullProductURL = string.Concat(cboMethod.Text, "/", productIdGuid.ToString());
+                InvokeAPI(fullProductURL);
+            }
         }
     }
 }
